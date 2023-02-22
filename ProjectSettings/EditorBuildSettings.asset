@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scenes/Main Menu.unity
+    guid: 064369d28fd4ba44bb1e6d1fff1615b7
+  - enabled: 1
     path: Assets/Scenes/Beltane.unity
     guid: 9fc0d4010bbf28b4594072e72b8655ab
   m_configObjects: {}

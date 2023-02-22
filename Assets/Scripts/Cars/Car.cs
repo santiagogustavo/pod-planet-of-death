@@ -31,11 +31,17 @@ public class Car : MonoBehaviour {
 
     Rigidbody rb;
     Texture originalEmissionMap;
+    MeshDeformation md;
+    GameObject repairMesh;
+
+    bool isReversing = false;
 
     void Start() {
         originalEmissionMap = brakeMaterial.GetTexture("_EmissionMap");
         rb = GetComponent<Rigidbody>();
         rb.centerOfMass = centerOfMass.transform.localPosition;
+        md = GetComponent<MeshDeformation>();
+        repairMesh = gameObject.transform.Find("Body").gameObject.transform.Find("Repair").gameObject;
 
         SetBrakeLights(false);
         SetRearLights(false);
@@ -50,7 +56,7 @@ public class Car : MonoBehaviour {
     }
 
     bool IsStopped() {
-        return Mathf.RoundToInt(GetLocalVelocity().z) < 3f;
+        return Mathf.RoundToInt(GetLocalVelocity().z) <= 0f;
     }
 
     void SetBrakeLights(bool on) {
@@ -93,14 +99,13 @@ public class Car : MonoBehaviour {
 
     void RotateWheelModels() {
         for (int i = 0; i < wheels.Length; i++) {
-            WheelCollider wheelCollider = wheels[i].GetComponent<WheelCollider>();
             Transform wheelTransform = wheels[i].GetComponent<Transform>();
 
             /* Steering rotation */
             if (wheels[i].name == "FL" || wheels[i].name == "FR") {
                 wheelTransform.localEulerAngles = new Vector3(
                     wheelTransform.localEulerAngles.x,
-                    wheelCollider.steerAngle,
+                    Mathf.LerpAngle(wheelTransform.localEulerAngles.y, currentTurnAngle, Time.deltaTime * stabilizationSpeed),
                     wheelTransform.localEulerAngles.z
                 );
             }
@@ -137,15 +142,7 @@ public class Car : MonoBehaviour {
 
     void ComputeTurnAngle() {
         float horizontal = Input.GetAxis("Horizontal");
-
-        if (currentTurnAngle > 0f) {
-            currentTurnAngle -= stabilizationSpeed;
-        } else if (currentTurnAngle < 0f) {
-            currentTurnAngle += stabilizationSpeed;
-        }
-
-        currentTurnAngle += horizontal * turnSpeed;
-        currentTurnAngle = Mathf.Clamp(currentTurnAngle, -maxTurnAngle, maxTurnAngle);
+        currentTurnAngle = horizontal * maxTurnAngle;
     }
 
     void ComputeAcceleration() {
@@ -154,24 +151,22 @@ public class Car : MonoBehaviour {
             return;
         }
 
-        bool reverse = IsStopped() && Input.GetAxis("Vertical") == -1f;
-
-        if (reverse) {
+        if (isReversing) {
             currentAcceleration = -(acceleration + rb.mass);
         } else {
             currentAcceleration = 0f;
         }
 
         if (InputManager.instance.IsAccelerating()) {
-            currentAcceleration = (acceleration + rb.mass) * InputManager.instance.rightTrigger;
-        } else if (!reverse) {
+            currentAcceleration = (acceleration + rb.mass) * InputManager.instance.acceleration;
+        } else if (!isReversing) {
             currentAcceleration = 0f;
         }
     }
 
     void ComputeBraking() {
         if (InputManager.instance.IsBraking()) {
-            currentBrakeForce = (brakingForce + rb.mass) * InputManager.instance.leftTrigger;
+            currentBrakeForce = (brakingForce + rb.mass) * InputManager.instance.braking;
         } else {
             currentBrakeForce = 0f;
         }
@@ -184,12 +179,29 @@ public class Car : MonoBehaviour {
     }
 
     void FixedUpdate() {
+        if (GameManager.instance.isPaused) {
+            return;
+        }
         ApplyTorqueToWheels();
     }
 
     void Update() {
+        if (GameManager.instance.isPaused) {
+            return;
+        }
         ComputeInputs();
-        bool reverse = IsStopped() && Input.GetAxis("Vertical") == -1f;
+
+        if (md.isRepairing) {
+            repairMesh.SetActive(true);
+        } else {
+            repairMesh.SetActive(false);
+        }
+
+        if (IsStopped() && InputManager.instance.vertical < 0f) {
+            isReversing = true;
+        } else {
+            isReversing = false;
+        }
 
         if (InputManager.instance.IsAccelerating()) {
             if (Mathf.Max(0, Mathf.RoundToInt(GetLocalVelocity().z)) < 3f) {
@@ -197,7 +209,7 @@ public class Car : MonoBehaviour {
             }
         }
 
-        if (reverse) {
+        if (isReversing) {
             SetRearLights(true);
         } else {
             SetRearLights(false);
@@ -205,7 +217,7 @@ public class Car : MonoBehaviour {
 
         if (InputManager.instance.IsBraking()) {
             SetBrakeLights(true);
-        } else if (!reverse) {
+        } else if (!isReversing) {
             SetBrakeLights(false);
         }
 
